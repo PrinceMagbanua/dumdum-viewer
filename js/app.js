@@ -29,11 +29,8 @@
     folderFileList: document.getElementById("folder-file-list"),
     currentFileIcon: document.getElementById("current-file-icon"),
     currentFileName: document.getElementById("current-file-name"),
-    toggleRendered: document.getElementById("toggle-rendered"),
-    togglePlain: document.getElementById("toggle-plain"),
     emptyState: document.getElementById("empty-state"),
-    renderedView: document.getElementById("rendered-view"),
-    editView: document.getElementById("edit-view"),
+    markdownEditor: document.getElementById("markdown-editor"),
     dropZone: document.getElementById("drop-zone"),
     dragOverlay: document.getElementById("drag-overlay"),
     dragOverlayEmoji: document.getElementById("drag-overlay-emoji"),
@@ -47,18 +44,10 @@
     tourNext: document.getElementById("tour-next"),
     tourSkip: document.getElementById("tour-skip"),
     tourDontShow: document.getElementById("tour-dont-show"),
-    editToolbar: document.getElementById("edit-toolbar"),
-    modeFab: document.getElementById("mode-fab"),
-    modeFabIcon: document.getElementById("mode-fab-icon"),
   };
 
-  let currentText = "";
   let hasFile = false;
-  let currentMode = localStorage.getItem("dumdum-view-mode") || "rendered";
-  const turndownService = new (window.TurndownService || function () {})({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-  });
+  let editorInstance = null;
 
   /* --------------------------- THEME --------------------------- */
   function applyTheme(theme) {
@@ -67,6 +56,7 @@
     document.querySelectorAll(".theme-swatch").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.themeValue === theme);
     });
+    els.markdownEditor.classList.toggle("toastui-editor-dark", theme === "dark");
   }
 
   (function initTheme() {
@@ -103,113 +93,31 @@
     setSidebarCollapsed(!els.sidebar.classList.contains("collapsed"));
   });
 
-  /* --------------------------- VIEW / EDIT TOGGLE --------------------------- */
-  function syncFromRenderedToText() {
-    if (turndownService.turndown) {
-      try {
-        currentText = turndownService.turndown(els.renderedView.innerHTML);
-      } catch (err) {
-        /* keep last known good text if conversion fails */
-      }
-    }
-  }
-
-  function syncFromTextToRendered() {
-    currentText = els.editView.value;
-    renderMarkdownInto(els.renderedView, currentText);
-  }
-
-  function setMode(mode) {
-    // Pull whatever the user just edited into currentText before switching away.
-    if (currentMode === "rendered" && hasFile) syncFromRenderedToText();
-    if (currentMode === "plain" && hasFile) syncFromTextToRendered();
-
-    currentMode = mode;
-    localStorage.setItem("dumdum-view-mode", mode);
-    els.toggleRendered.classList.toggle("active", mode === "rendered");
-    els.togglePlain.classList.toggle("active", mode === "plain");
-    els.renderedView.classList.toggle("hidden", mode !== "rendered");
-    els.editView.classList.toggle("hidden", mode !== "plain");
-
-    if (hasFile && mode === "plain") {
-      els.editView.value = currentText;
-    }
-    els.renderedView.setAttribute("contenteditable", hasFile ? "true" : "false");
-    els.editToolbar.classList.toggle("hidden", !(hasFile && mode === "rendered"));
-  }
-
-  els.toggleRendered.addEventListener("click", () => {
-    setMode("rendered");
-    els.modeFab.classList.remove("expanded");
-  });
-  els.togglePlain.addEventListener("click", () => {
-    setMode("plain");
-    els.modeFab.classList.remove("expanded");
-  });
-
-  /* --------------------------- FLOATING MODE SWITCH --------------------------- */
-  els.modeFabIcon.addEventListener("click", () => {
-    els.modeFab.classList.toggle("expanded");
-  });
-
-  document.addEventListener("click", (e) => {
-    if (!els.modeFab.contains(e.target)) {
-      els.modeFab.classList.remove("expanded");
-    }
-  });
-
-  /* --------------------------- PRETTY VIEW TOOLBAR --------------------------- */
-  els.editToolbar.querySelectorAll("button").forEach((btn) => {
-    // Prevent the button from stealing focus/selection away from the editable area.
-    btn.addEventListener("mousedown", (e) => e.preventDefault());
-    btn.addEventListener("click", () => {
-      els.renderedView.focus();
-      const cmd = btn.dataset.cmd;
-      let value = btn.dataset.value || null;
-      if (cmd === "createLink") {
-        value = prompt("Where should this link go? (paste a web address)");
-        if (!value) return;
-      }
-      document.execCommand(cmd, false, value);
+  /* --------------------------- EDITOR (Toast UI) --------------------------- */
+  function ensureEditor() {
+    if (editorInstance) return editorInstance;
+    editorInstance = new toastui.Editor({
+      el: els.markdownEditor,
+      height: "70vh",
+      initialEditType: "wysiwyg",
+      previewStyle: "vertical",
+      usageStatistics: false,
     });
-  });
-
-  // Editing directly in the textarea keeps currentText live without waiting for a mode switch.
-  els.editView.addEventListener("input", () => {
-    currentText = els.editView.value;
-  });
-
-  // In Pretty View, require Ctrl/Cmd+click to follow links so normal clicks just place the cursor for editing.
-  els.renderedView.addEventListener("click", (e) => {
-    const link = e.target.closest("a");
-    if (link && !(e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-    }
-  });
-
-  function renderMarkdownInto(target, text) {
-    try {
-      const rawHtml = marked.parse(text);
-      target.innerHTML = DOMPurify.sanitize(rawHtml);
-    } catch (err) {
-      target.innerHTML = "<p><em>Couldn't format this file. Showing plain text instead.</em></p>";
-    }
+    return editorInstance;
   }
 
   /* --------------------------- RENDERING --------------------------- */
   function showFile(name, text) {
-    currentText = text;
     hasFile = true;
     els.emptyState.classList.add("hidden");
+    els.markdownEditor.classList.remove("hidden");
     els.currentFileIcon.textContent = "📄";
     els.currentFileName.textContent = name;
     els.currentFileName.title = name;
 
-    renderMarkdownInto(els.renderedView, text);
-    els.editView.value = text;
-    els.renderedView.setAttribute("contenteditable", "true");
+    const editor = ensureEditor();
+    editor.setMarkdown(text);
 
-    setMode(currentMode);
     setSidebarCollapsed(false);
   }
 
@@ -521,13 +429,6 @@
       body: "Every file you open is remembered here, even after closing your browser. Click any of them to jump straight back in.",
     },
     {
-      target: "#mode-fab-icon",
-      placement: "left",
-      emoji: "✏️",
-      title: "Pretty View vs. Edit View",
-      body: "This bubble in the corner switches how your file is shown. Hover or click it to reveal 'Pretty View' (nicely formatted, and directly editable) and 'Edit View' (the raw Markdown code, for developers).",
-    },
-    {
       target: "#theme-picker-btn",
       placement: "bottom",
       emoji: "🎨",
@@ -539,7 +440,7 @@
       placement: "bottom",
       emoji: "❓",
       title: "Need this again?",
-      body: "Click HELP! any time to replay this tour. You're all set — happy reading!",
+      body: "Once you open a file, a small toolbar appears with formatting tools plus a WYSIWYG/Markdown switch in the corner. Click HELP! any time to replay this tour.",
     },
   ];
 
@@ -598,8 +499,6 @@
     const step = TOUR_STEPS[tourStep];
     if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
 
-    els.modeFab.classList.toggle("expanded", step.target === "#mode-fab-icon");
-
     const target = document.querySelector(step.target);
     if (!target) {
       nextTourStep();
@@ -651,7 +550,6 @@
   function closeTour() {
     tourActive = false;
     els.tourTooltip.classList.add("hidden");
-    els.modeFab.classList.remove("expanded");
     if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
     currentHighlighted = null;
     window.removeEventListener("resize", repositionIfActive);
@@ -671,7 +569,6 @@
     const savedCollapsed = localStorage.getItem("dumdum-sidebar-collapsed");
     setSidebarCollapsed(savedCollapsed === null ? true : savedCollapsed === "true");
 
-    setMode(currentMode);
     await renderHistory();
     await restoreLastFolder();
 

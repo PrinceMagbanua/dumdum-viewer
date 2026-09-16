@@ -7,9 +7,9 @@
 <meta name="description" content="The no-fuss Markdown viewer for people who just want to read their files." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>" />
 <link rel="stylesheet" href="css/style.css" />
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js" defer></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@toast-ui/editor/dist/toastui-editor.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@toast-ui/editor/dist/theme/toastui-editor-dark.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/@toast-ui/editor/dist/toastui-editor-all.min.js" defer></script>
 <script src="js/idb.js" defer></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -98,18 +98,6 @@
     </div>
 
     <div class="viewer-frame" id="drop-zone">
-      <div id="edit-toolbar" class="edit-toolbar hidden">
-        <button data-cmd="bold" title="Bold"><b>B</b></button>
-        <button data-cmd="italic" title="Italic"><i>I</i></button>
-        <button data-cmd="formatBlock" data-value="H2" title="Heading">H</button>
-        <button data-cmd="insertUnorderedList" title="Bullet list">• —</button>
-        <button data-cmd="insertOrderedList" title="Numbered list">1. —</button>
-        <button data-cmd="formatBlock" data-value="BLOCKQUOTE" title="Quote">❝</button>
-        <button data-cmd="formatBlock" data-value="PRE" title="Code block">{ }</button>
-        <button data-cmd="createLink" title="Add a link">🔗</button>
-        <button data-cmd="removeFormat" title="Clear formatting">⌫</button>
-      </div>
-
       <div id="drag-overlay" class="drag-overlay hidden">
         <div class="drag-overlay-emoji" id="drag-overlay-emoji">📄</div>
         <p id="drag-overlay-text">Drop it here!</p>
@@ -121,8 +109,7 @@
         <p id="drop-subtitle">...or click here, or use the 📂 button up top to open a file or folder.</p>
       </div>
 
-      <article id="rendered-view" class="rendered-view hidden" contenteditable="false"></article>
-      <textarea id="edit-view" class="edit-view hidden" spellcheck="false"></textarea>
+      <div id="markdown-editor" class="markdown-editor hidden"></div>
     </div>
   </main>
 </div>
@@ -130,15 +117,6 @@
 <button id="sidebar-handle" class="sidebar-handle" title="Show/hide your files">
   <span id="sidebar-handle-arrow">›</span>
 </button>
-
-<!-- ============ FLOATING VIEW/EDIT MODE SWITCH ============ -->
-<div id="mode-fab" class="mode-fab">
-  <div class="mode-fab-options" id="view-toggle">
-    <button id="toggle-rendered" class="fab-option active">🖼️ Pretty View</button>
-    <button id="toggle-plain" class="fab-option">✏️ Edit View <small>(dev)</small></button>
-  </div>
-  <button id="mode-fab-icon" class="mode-fab-icon" title="Switch between Pretty View and Edit View">✏️</button>
-</div>
 
 <!-- ============ GUIDED TOOLTIP TOUR ============ -->
 <div id="tour-tooltip" class="tour-tooltip hidden">
