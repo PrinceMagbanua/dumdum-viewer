@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js" defer></script>
 <script src="js/idb.js" defer></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -17,10 +18,10 @@
 <!-- ============ TOP BAR ============ -->
 <header class="topbar">
   <div class="brand">
+    <button id="sidebar-toggle-btn" class="icon-btn" title="Show/hide your files">☰</button>
     <span class="brand-emoji">📖</span>
     <div class="brand-text">
       <h1>Dumdum Viewer</h1>
-      <p>Markdown, made painfully simple.</p>
     </div>
   </div>
 
@@ -57,34 +58,35 @@
 <div class="app-layout">
 
   <!-- ------------ SIDEBAR ------------ -->
-  <aside class="sidebar">
-    <div class="sidebar-section">
-      <h2>📂 Get a File</h2>
-      <button id="open-file-btn" class="big-btn primary">
-        📄 Open a Markdown File
-      </button>
-      <button id="open-folder-btn" class="big-btn secondary">
-        🗂️ Open a Folder
-      </button>
-      <p id="fsa-warning" class="tiny-warning hidden">
-        ⚠️ Your browser doesn't support folder access. Try Chrome or Edge for the full experience — you can still open single files below.
-      </p>
-      <input type="file" id="fallback-file-input" accept=".md,.markdown,.txt" class="hidden" />
-    </div>
+  <aside class="sidebar collapsed" id="sidebar">
+    <div class="sidebar-inner">
+      <div class="sidebar-section" id="open-section">
+        <h2>📂 Get a File</h2>
+        <button id="open-file-btn" class="big-btn primary">
+          📄 Open a Markdown File
+        </button>
+        <button id="open-folder-btn" class="big-btn secondary">
+          🗂️ Open a Folder
+        </button>
+        <p id="fsa-warning" class="tiny-warning hidden">
+          ⚠️ Your browser doesn't support folder access. Try Chrome or Edge for the full experience — you can still open single files below.
+        </p>
+        <input type="file" id="fallback-file-input" accept=".md,.markdown,.txt" class="hidden" />
+      </div>
 
-    <div class="sidebar-section">
-      <h2>🕒 Recent Files</h2>
-      <p class="hint-text">Files you've opened before show up here — just click to jump back in.</p>
-      <ul id="recent-list" class="recent-list">
-        <li class="empty-state">Nothing yet — open a file to get started!</li>
-      </ul>
-      <button id="clear-history-btn" class="link-btn">Clear history</button>
-    </div>
+      <div class="sidebar-section" id="recent-section">
+        <h2>🕒 Recent Files</h2>
+        <ul id="recent-list" class="recent-list">
+          <li class="empty-state">Nothing yet — open a file to get started!</li>
+        </ul>
+        <button id="clear-history-btn" class="link-btn">Clear history</button>
+      </div>
 
-    <div class="sidebar-section" id="folder-section" style="display:none;">
-      <h2>📁 Current Folder</h2>
-      <p class="hint-text" id="folder-name-label">—</p>
-      <ul id="folder-file-list" class="recent-list"></ul>
+      <div class="sidebar-section" id="folder-section" style="display:none;">
+        <h2>📁 Current Folder</h2>
+        <p class="hint-text" id="folder-name-label">—</p>
+        <ul id="folder-file-list" class="recent-list"></ul>
+      </div>
     </div>
   </aside>
 
@@ -97,57 +99,54 @@
         <span id="current-file-name">No file open yet</span>
       </div>
 
-      <div class="view-toggle" role="group" aria-label="Switch how the file is shown">
+      <div class="view-toggle" id="view-toggle" role="group" aria-label="Switch between Pretty View and raw Edit View">
         <button id="toggle-rendered" class="toggle-btn active">
           🖼️ Pretty View
-          <small>See it formatted, like a document</small>
         </button>
         <button id="toggle-plain" class="toggle-btn">
-          🔤 Plain Text
-          <small>See the raw words and symbols</small>
+          ✏️ Edit View <small>(for developers)</small>
         </button>
       </div>
     </div>
 
-    <div class="viewer-frame">
-      <div id="empty-state" class="empty-viewer">
-        <div class="empty-emoji">🙋</div>
-        <h2>Nothing to show yet</h2>
-        <p>Open a Markdown file or a folder from the left to get started.</p>
-        <p class="empty-sub">Not sure what any of this means? Hit the <strong>❓ HELP!</strong> button up top.</p>
+    <p class="toggle-hint">💡 <strong>Pretty View is already editable</strong> — just click anywhere in the text below and start typing. You only need Edit View if you want to see the raw Markdown code.</p>
+
+    <div class="viewer-frame" id="drop-zone">
+      <div id="drag-overlay" class="drag-overlay hidden">
+        <div class="drag-overlay-emoji" id="drag-overlay-emoji">📄</div>
+        <p id="drag-overlay-text">Drop it here!</p>
       </div>
 
-      <article id="rendered-view" class="rendered-view hidden"></article>
-      <pre id="plain-view" class="plain-view hidden"></pre>
+      <div id="empty-state" class="empty-viewer">
+        <div class="empty-emoji">🙋</div>
+        <h2 id="drop-title">Drag a Markdown file here</h2>
+        <p id="drop-subtitle">...or click here, or use the 📂 button up top to open a file or folder.</p>
+      </div>
+
+      <article id="rendered-view" class="rendered-view hidden" contenteditable="false"></article>
+      <textarea id="edit-view" class="edit-view hidden" spellcheck="false"></textarea>
     </div>
   </main>
 </div>
 
-<!-- ============ ONBOARDING GUIDE OVERLAY ============ -->
-<div id="onboarding-overlay" class="overlay hidden">
-  <div class="onboarding-card">
-    <div class="onboarding-step-emoji" id="ob-emoji">👋</div>
-    <h2 id="ob-title">Welcome to Dumdum Viewer!</h2>
-    <p id="ob-body">This tiny guide will show you everything in about 30 seconds. No jargon, promise.</p>
-
-    <div class="onboarding-dots" id="ob-dots"></div>
-
-    <div class="onboarding-actions">
-      <label class="dont-show-label">
-        <input type="checkbox" id="ob-dont-show" />
-        Don't show this again
-      </label>
-      <div class="onboarding-buttons">
-        <button id="ob-skip" class="link-btn">Skip</button>
-        <button id="ob-next" class="big-btn primary small">Next →</button>
-      </div>
+<!-- ============ GUIDED TOOLTIP TOUR ============ -->
+<div id="tour-tooltip" class="tour-tooltip hidden">
+  <div class="tour-arrow" id="tour-arrow"></div>
+  <div class="tour-emoji" id="tour-emoji">👋</div>
+  <h3 id="tour-title">Welcome!</h3>
+  <p id="tour-body">Text</p>
+  <div class="tour-dots" id="tour-dots"></div>
+  <div class="tour-actions">
+    <label class="dont-show-label">
+      <input type="checkbox" id="tour-dont-show" />
+      Don't show this again
+    </label>
+    <div class="tour-buttons">
+      <button id="tour-skip" class="link-btn">Skip</button>
+      <button id="tour-next" class="big-btn primary small">Next →</button>
     </div>
   </div>
 </div>
-
-<footer class="footer">
-  <p>Made for people who just want to read their darn Markdown files. No sign-up, no cloud, your files never leave your computer.</p>
-</footer>
 
 </body>
 </html>

@@ -9,8 +9,11 @@
   const HAS_FSA = "showOpenFilePicker" in window && "showDirectoryPicker" in window;
   const HISTORY_KEY = "history-list";
   const MAX_HISTORY = 15;
+  const VALID_EXT = /\.(md|markdown|txt)$/i;
 
   const els = {
+    sidebar: document.getElementById("sidebar"),
+    sidebarToggleBtn: document.getElementById("sidebar-toggle-btn"),
     themeBtn: document.getElementById("theme-picker-btn"),
     themePopover: document.getElementById("theme-popover"),
     helpBtn: document.getElementById("help-btn"),
@@ -29,19 +32,29 @@
     togglePlain: document.getElementById("toggle-plain"),
     emptyState: document.getElementById("empty-state"),
     renderedView: document.getElementById("rendered-view"),
-    plainView: document.getElementById("plain-view"),
-    overlay: document.getElementById("onboarding-overlay"),
-    obEmoji: document.getElementById("ob-emoji"),
-    obTitle: document.getElementById("ob-title"),
-    obBody: document.getElementById("ob-body"),
-    obDots: document.getElementById("ob-dots"),
-    obNext: document.getElementById("ob-next"),
-    obSkip: document.getElementById("ob-skip"),
-    obDontShow: document.getElementById("ob-dont-show"),
+    editView: document.getElementById("edit-view"),
+    dropZone: document.getElementById("drop-zone"),
+    dragOverlay: document.getElementById("drag-overlay"),
+    dragOverlayEmoji: document.getElementById("drag-overlay-emoji"),
+    dragOverlayText: document.getElementById("drag-overlay-text"),
+    tourTooltip: document.getElementById("tour-tooltip"),
+    tourArrow: document.getElementById("tour-arrow"),
+    tourEmoji: document.getElementById("tour-emoji"),
+    tourTitle: document.getElementById("tour-title"),
+    tourBody: document.getElementById("tour-body"),
+    tourDots: document.getElementById("tour-dots"),
+    tourNext: document.getElementById("tour-next"),
+    tourSkip: document.getElementById("tour-skip"),
+    tourDontShow: document.getElementById("tour-dont-show"),
   };
 
   let currentText = "";
+  let hasFile = false;
   let currentMode = localStorage.getItem("dumdum-view-mode") || "rendered";
+  const turndownService = new (window.TurndownService || function () {})({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+  });
 
   /* --------------------------- THEME --------------------------- */
   function applyTheme(theme) {
@@ -53,8 +66,7 @@
   }
 
   (function initTheme() {
-    const saved = localStorage.getItem("dumdum-theme") || "light";
-    applyTheme(saved);
+    applyTheme(localStorage.getItem("dumdum-theme") || "light");
   })();
 
   els.themeBtn.addEventListener("click", () => {
@@ -74,40 +86,90 @@
     }
   });
 
-  /* --------------------------- VIEW TOGGLE --------------------------- */
+  /* --------------------------- SIDEBAR --------------------------- */
+  function setSidebarCollapsed(collapsed) {
+    els.sidebar.classList.toggle("collapsed", collapsed);
+    localStorage.setItem("dumdum-sidebar-collapsed", collapsed ? "true" : "false");
+  }
+
+  els.sidebarToggleBtn.addEventListener("click", () => {
+    setSidebarCollapsed(!els.sidebar.classList.contains("collapsed"));
+  });
+
+  /* --------------------------- VIEW / EDIT TOGGLE --------------------------- */
+  function syncFromRenderedToText() {
+    if (turndownService.turndown) {
+      try {
+        currentText = turndownService.turndown(els.renderedView.innerHTML);
+      } catch (err) {
+        /* keep last known good text if conversion fails */
+      }
+    }
+  }
+
+  function syncFromTextToRendered() {
+    currentText = els.editView.value;
+    renderMarkdownInto(els.renderedView, currentText);
+  }
+
   function setMode(mode) {
+    // Pull whatever the user just edited into currentText before switching away.
+    if (currentMode === "rendered" && hasFile) syncFromRenderedToText();
+    if (currentMode === "plain" && hasFile) syncFromTextToRendered();
+
     currentMode = mode;
     localStorage.setItem("dumdum-view-mode", mode);
     els.toggleRendered.classList.toggle("active", mode === "rendered");
     els.togglePlain.classList.toggle("active", mode === "plain");
     els.renderedView.classList.toggle("hidden", mode !== "rendered");
-    els.plainView.classList.toggle("hidden", mode !== "plain");
+    els.editView.classList.toggle("hidden", mode !== "plain");
+
+    if (hasFile && mode === "plain") {
+      els.editView.value = currentText;
+    }
+    els.renderedView.setAttribute("contenteditable", hasFile ? "true" : "false");
   }
 
   els.toggleRendered.addEventListener("click", () => setMode("rendered"));
   els.togglePlain.addEventListener("click", () => setMode("plain"));
 
+  // Editing directly in the textarea keeps currentText live without waiting for a mode switch.
+  els.editView.addEventListener("input", () => {
+    currentText = els.editView.value;
+  });
+
+  // In Pretty View, require Ctrl/Cmd+click to follow links so normal clicks just place the cursor for editing.
+  els.renderedView.addEventListener("click", (e) => {
+    const link = e.target.closest("a");
+    if (link && !(e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+    }
+  });
+
+  function renderMarkdownInto(target, text) {
+    try {
+      const rawHtml = marked.parse(text);
+      target.innerHTML = DOMPurify.sanitize(rawHtml);
+    } catch (err) {
+      target.innerHTML = "<p><em>Couldn't format this file. Showing plain text instead.</em></p>";
+    }
+  }
+
   /* --------------------------- RENDERING --------------------------- */
   function showFile(name, text) {
     currentText = text;
+    hasFile = true;
     els.emptyState.classList.add("hidden");
     els.currentFileIcon.textContent = "📄";
     els.currentFileName.textContent = name;
+    els.currentFileName.title = name;
 
-    els.plainView.textContent = text;
+    renderMarkdownInto(els.renderedView, text);
+    els.editView.value = text;
+    els.renderedView.setAttribute("contenteditable", "true");
 
-    try {
-      const rawHtml = marked.parse(text);
-      const cleanHtml = DOMPurify.sanitize(rawHtml);
-      els.renderedView.innerHTML = cleanHtml;
-    } catch (err) {
-      els.renderedView.innerHTML = "<p><em>Couldn't format this file. Showing plain text instead.</em></p>";
-      setMode("plain");
-    }
-
-    els.renderedView.classList.toggle("hidden", currentMode !== "rendered");
-    els.plainView.classList.toggle("hidden", currentMode !== "plain");
     setMode(currentMode);
+    setSidebarCollapsed(false);
   }
 
   /* --------------------------- HISTORY --------------------------- */
@@ -122,7 +184,6 @@
 
   async function addToHistory(entry) {
     let list = await getHistory();
-    // Remove any existing entry that points at the same file name (simple de-dupe)
     list = list.filter((item) => item.name !== entry.name);
     list.unshift(entry);
     if (list.length > MAX_HISTORY) list = list.slice(0, MAX_HISTORY);
@@ -198,7 +259,7 @@
   }
 
   /* --------------------------- OPEN FILE (File System Access API) --------------------------- */
-  els.openFileBtn.addEventListener("click", async () => {
+  async function openFilePicker() {
     if (!HAS_FSA) {
       els.fallbackInput.click();
       return;
@@ -223,7 +284,10 @@
         alert("Something went wrong opening that file.\n\n" + err.message);
       }
     }
-  });
+  }
+
+  els.openFileBtn.addEventListener("click", openFilePicker);
+  els.emptyState.addEventListener("click", openFilePicker);
 
   /* --------------------------- OPEN FILE (fallback, no FSA support) --------------------------- */
   els.fallbackInput.addEventListener("change", async (e) => {
@@ -231,7 +295,6 @@
     if (!file) return;
     const text = await file.text();
     showFile(file.name, text);
-    // Can't persist a plain <input> file across reloads — no handle to store.
     await addToHistory({ name: file.name, time: Date.now(), handle: null });
     e.target.value = "";
   });
@@ -263,7 +326,7 @@
 
     const mdFiles = [];
     for await (const [name, handle] of dirHandle.entries()) {
-      if (handle.kind === "file" && /\.(md|markdown|txt)$/i.test(name)) {
+      if (handle.kind === "file" && VALID_EXT.test(name)) {
         mdFiles.push({ name, handle });
       }
     }
@@ -286,6 +349,7 @@
       });
       els.folderFileList.appendChild(li);
     }
+    setSidebarCollapsed(false);
   }
 
   async function restoreLastFolder() {
@@ -296,8 +360,6 @@
       if (perm === "granted") {
         await loadFolder(dirHandle);
       } else {
-        // Don't prompt automatically on load (needs a user gesture) —
-        // just show the folder name with a re-connect option.
         els.folderSection.style.display = "block";
         els.folderNameLabel.textContent = dirHandle.name + " (click a file to reconnect)";
         els.folderFileList.innerHTML =
@@ -311,92 +373,261 @@
 
   if (!HAS_FSA) {
     els.fsaWarning.classList.remove("hidden");
-    els.openFolderBtn.disabled = false; // keep clickable to show the explainer alert
   }
 
-  /* --------------------------- ONBOARDING GUIDE --------------------------- */
-  const ONBOARDING_STEPS = [
+  /* --------------------------- DRAG & DROP --------------------------- */
+  let dragDepth = 0;
+
+  function extractNamesFromDataTransfer(dataTransfer) {
+    const names = [];
+    if (dataTransfer.items) {
+      for (const item of dataTransfer.items) {
+        if (item.kind !== "file") continue;
+        const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+        if (entry && entry.name) {
+          names.push(entry.name);
+        } else if (item.type) {
+          names.push(""); // unknown name, can't validate ahead of drop
+        }
+      }
+    }
+    return names;
+  }
+
+  function showDragOverlay(valid) {
+    els.dragOverlay.classList.remove("hidden");
+    els.dropZone.classList.toggle("drag-over", valid);
+    els.dropZone.classList.toggle("drag-invalid", !valid);
+    if (valid) {
+      els.dragOverlayEmoji.textContent = "📄";
+      els.dragOverlayText.textContent = "Drop it here!";
+    } else {
+      els.dragOverlayEmoji.textContent = "🤨";
+      els.dragOverlayText.textContent = "Wait, this isn't a Markdown file?";
+    }
+  }
+
+  function hideDragOverlay() {
+    dragDepth = 0;
+    els.dragOverlay.classList.add("hidden");
+    els.dropZone.classList.remove("drag-over", "drag-invalid");
+  }
+
+  els.dropZone.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    dragDepth++;
+    const names = extractNamesFromDataTransfer(e.dataTransfer);
+    const allValid = names.length === 0 || names.every((n) => n === "" || VALID_EXT.test(n));
+    showDragOverlay(allValid);
+  });
+
+  els.dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+
+  els.dropZone.addEventListener("dragleave", (e) => {
+    dragDepth--;
+    if (dragDepth <= 0) hideDragOverlay();
+  });
+
+  els.dropZone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    hideDragOverlay();
+
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+
+    if (!VALID_EXT.test(file.name)) {
+      alert("🤨 Wait, this isn't a Markdown file? Please drop a .md, .markdown, or .txt file.");
+      return;
+    }
+
+    let handle = null;
+    try {
+      if (e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+        handle = await e.dataTransfer.items[0].getAsFileSystemHandle();
+      }
+    } catch (err) {
+      handle = null;
+    }
+
+    const text = await file.text();
+    showFile(file.name, text);
+    await addToHistory({ name: file.name, time: Date.now(), handle });
+  });
+
+  /* --------------------------- GUIDED TOOLTIP TOUR --------------------------- */
+  const TOUR_STEPS = [
     {
+      target: "#sidebar-toggle-btn",
+      placement: "right",
       emoji: "👋",
       title: "Welcome to Dumdum Viewer!",
-      body: "This is a super simple way to read Markdown (.md) files. No technical know-how needed. Let's take a 30-second tour.",
+      body: "This tiny guided tour points out each feature right where it lives. Click this ☰ button any time to show or hide your file list.",
     },
     {
+      target: "#open-file-btn",
+      placement: "right",
       emoji: "📂",
       title: "Opening files",
-      body: "Use the buttons on the left — 'Open a Markdown File' for one file, or 'Open a Folder' to browse everything in a project folder at once.",
+      body: "Open a single Markdown file, or use 'Open a Folder' to browse everything in a project at once. You can also just drag a file onto the page!",
     },
     {
+      target: "#recent-list",
+      placement: "right",
       emoji: "🕒",
       title: "Recent Files",
-      body: "Every file you open is remembered here, even after you close your browser. Click any of them to jump straight back in.",
+      body: "Every file you open is remembered here, even after closing your browser. Click any of them to jump straight back in.",
     },
     {
-      emoji: "🖼️🔤",
-      title: "Pretty View vs. Plain Text",
-      body: "Use the big switch at the top of the page. 'Pretty View' shows the file nicely formatted. 'Plain Text' shows exactly what's typed, symbols and all — handy for copying.",
+      target: "#view-toggle",
+      placement: "bottom",
+      emoji: "🖼️",
+      title: "Pretty View vs. Edit View",
+      body: "Pretty View shows your file nicely formatted — and you can click and type right into it. Edit View shows the raw Markdown code, for when you need it.",
     },
     {
+      target: "#theme-picker-btn",
+      placement: "bottom",
       emoji: "🎨",
       title: "Pick a Theme",
-      body: "Click the 🎨 Theme button up top to switch between Daylight, Midnight, Cozy Cream, and Ocean Calm. Pick whatever's easiest on your eyes.",
+      body: "Switch between Daylight, Midnight, Cozy Cream, and Ocean Calm — pick whatever's easiest on your eyes.",
     },
     {
+      target: "#help-btn",
+      placement: "bottom",
       emoji: "❓",
       title: "Need this again?",
-      body: "Just click the ❓ HELP! button in the top corner any time you want to see this guide again. You're all set — happy reading!",
+      body: "Click HELP! any time to replay this tour. You're all set — happy reading!",
     },
   ];
 
-  let obStep = 0;
+  let tourStep = 0;
+  let tourActive = false;
+  let sidebarWasCollapsedBeforeTour = false;
+  let currentHighlighted = null;
 
-  function renderOnboardingStep() {
-    const step = ONBOARDING_STEPS[obStep];
-    els.obEmoji.textContent = step.emoji;
-    els.obTitle.textContent = step.title;
-    els.obBody.textContent = step.body;
-    els.obDots.innerHTML = "";
-    ONBOARDING_STEPS.forEach((_, i) => {
-      const dot = document.createElement("span");
-      if (i === obStep) dot.classList.add("active");
-      els.obDots.appendChild(dot);
-    });
-    els.obNext.textContent = obStep === ONBOARDING_STEPS.length - 1 ? "Got it! 🎉" : "Next →";
-  }
+  function positionTooltip(target) {
+    const rect = target.getBoundingClientRect();
+    const tip = els.tourTooltip;
+    tip.style.visibility = "hidden";
+    tip.classList.remove("hidden");
+    const tipRect = tip.getBoundingClientRect();
+    const step = TOUR_STEPS[tourStep];
+    let top, left;
+    const gap = 16;
 
-  function openOnboarding() {
-    obStep = 0;
-    renderOnboardingStep();
-    els.overlay.classList.remove("hidden");
-  }
-
-  function closeOnboarding() {
-    els.overlay.classList.add("hidden");
-    if (els.obDontShow.checked) {
-      localStorage.setItem("dumdum-hide-onboarding", "true");
+    switch (step.placement) {
+      case "right":
+        top = rect.top + rect.height / 2 - tipRect.height / 2;
+        left = rect.right + gap;
+        break;
+      case "bottom":
+        top = rect.bottom + gap;
+        left = rect.left + rect.width / 2 - tipRect.width / 2;
+        break;
+      default:
+        top = rect.bottom + gap;
+        left = rect.left;
     }
-  }
 
-  els.obNext.addEventListener("click", () => {
-    if (obStep === ONBOARDING_STEPS.length - 1) {
-      closeOnboarding();
+    top = Math.max(12, Math.min(top, window.innerHeight - tipRect.height - 12));
+    left = Math.max(12, Math.min(left, window.innerWidth - tipRect.width - 12));
+
+    tip.style.top = top + "px";
+    tip.style.left = left + "px";
+    tip.style.visibility = "visible";
+
+    els.tourArrow.className = "tour-arrow " + (step.placement === "right" ? "left" : "top");
+    if (step.placement === "right") {
+      els.tourArrow.style.top = rect.top + rect.height / 2 - top - 7 + "px";
+      els.tourArrow.style.left = "";
     } else {
-      obStep++;
-      renderOnboardingStep();
+      els.tourArrow.style.left = Math.max(14, rect.left + rect.width / 2 - left - 7) + "px";
+      els.tourArrow.style.top = "";
     }
-  });
+  }
 
-  els.obSkip.addEventListener("click", closeOnboarding);
-  els.helpBtn.addEventListener("click", openOnboarding);
+  function renderTourStep() {
+    const step = TOUR_STEPS[tourStep];
+    if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
+
+    const target = document.querySelector(step.target);
+    if (!target) {
+      nextTourStep();
+      return;
+    }
+    target.classList.add("tour-highlight");
+    currentHighlighted = target;
+
+    els.tourEmoji.textContent = step.emoji;
+    els.tourTitle.textContent = step.title;
+    els.tourBody.textContent = step.body;
+    els.tourDots.innerHTML = "";
+    TOUR_STEPS.forEach((_, i) => {
+      const dot = document.createElement("span");
+      if (i === tourStep) dot.classList.add("active");
+      els.tourDots.appendChild(dot);
+    });
+    els.tourNext.textContent = tourStep === TOUR_STEPS.length - 1 ? "Got it! 🎉" : "Next →";
+
+    positionTooltip(target);
+  }
+
+  function nextTourStep() {
+    if (tourStep >= TOUR_STEPS.length - 1) {
+      closeTour();
+    } else {
+      tourStep++;
+      renderTourStep();
+    }
+  }
+
+  function openTour() {
+    tourActive = true;
+    tourStep = 0;
+    sidebarWasCollapsedBeforeTour = els.sidebar.classList.contains("collapsed");
+    setSidebarCollapsed(false);
+    renderTourStep();
+    window.addEventListener("resize", repositionIfActive);
+    window.addEventListener("scroll", repositionIfActive, true);
+  }
+
+  function repositionIfActive() {
+    if (!tourActive) return;
+    const step = TOUR_STEPS[tourStep];
+    const target = document.querySelector(step.target);
+    if (target) positionTooltip(target);
+  }
+
+  function closeTour() {
+    tourActive = false;
+    els.tourTooltip.classList.add("hidden");
+    if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
+    currentHighlighted = null;
+    window.removeEventListener("resize", repositionIfActive);
+    window.removeEventListener("scroll", repositionIfActive, true);
+    if (!hasFile) setSidebarCollapsed(sidebarWasCollapsedBeforeTour);
+    if (els.tourDontShow.checked) {
+      localStorage.setItem("dumdum-hide-tour", "true");
+    }
+  }
+
+  els.tourNext.addEventListener("click", nextTourStep);
+  els.tourSkip.addEventListener("click", closeTour);
+  els.helpBtn.addEventListener("click", openTour);
 
   /* --------------------------- INIT --------------------------- */
   (async function init() {
+    const savedCollapsed = localStorage.getItem("dumdum-sidebar-collapsed");
+    setSidebarCollapsed(savedCollapsed === null ? true : savedCollapsed === "true");
+
     setMode(currentMode);
     await renderHistory();
     await restoreLastFolder();
 
-    if (localStorage.getItem("dumdum-hide-onboarding") !== "true") {
-      openOnboarding();
+    if (localStorage.getItem("dumdum-hide-tour") !== "true") {
+      openTour();
     }
   })();
 })();
