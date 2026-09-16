@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dumdum Viewer — Markdown Made Easy</title>
+<meta name="description" content="The no-fuss Markdown viewer for people who just want to read their files." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
+<script src="js/idb.js" defer></script>
+<script src="js/app.js" defer></script>
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-emoji">📖</span>
+    <div class="brand-text">
+      <h1>Dumdum Viewer</h1>
+      <p>Markdown, made painfully simple.</p>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="theme-picker-btn" class="pill-btn" title="Change the look of the app">
+      🎨 <span>Theme</span>
+    </button>
+    <button id="help-btn" class="pill-btn help-btn" title="Show the guide again">
+      ❓ <span>HELP!</span>
+    </button>
+  </div>
+</header>
+
+<!-- ============ THEME PICKER POPOVER ============ -->
+<div id="theme-popover" class="popover hidden">
+  <p class="popover-title">Pick a look you like:</p>
+  <div class="theme-grid">
+    <button class="theme-swatch" data-theme-value="light">
+      <span class="swatch swatch-light"></span> Daylight
+    </button>
+    <button class="theme-swatch" data-theme-value="dark">
+      <span class="swatch swatch-dark"></span> Midnight
+    </button>
+    <button class="theme-swatch" data-theme-value="sunny">
+      <span class="swatch swatch-sunny"></span> Cozy Cream
+    </button>
+    <button class="theme-swatch" data-theme-value="ocean">
+      <span class="swatch swatch-ocean"></span> Ocean Calm
+    </button>
+  </div>
+</div>
+
+<!-- ============ MAIN LAYOUT ============ -->
+<div class="app-layout">
+
+  <!-- ------------ SIDEBAR ------------ -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h2>📂 Get a File</h2>
+      <button id="open-file-btn" class="big-btn primary">
+        📄 Open a Markdown File
+      </button>
+      <button id="open-folder-btn" class="big-btn secondary">
+        🗂️ Open a Folder
+      </button>
+      <p id="fsa-warning" class="tiny-warning hidden">
+        ⚠️ Your browser doesn't support folder access. Try Chrome or Edge for the full experience — you can still open single files below.
+      </p>
+      <input type="file" id="fallback-file-input" accept=".md,.markdown,.txt" class="hidden" />
+    </div>
+
+    <div class="sidebar-section">
+      <h2>🕒 Recent Files</h2>
+      <p class="hint-text">Files you've opened before show up here — just click to jump back in.</p>
+      <ul id="recent-list" class="recent-list">
+        <li class="empty-state">Nothing yet — open a file to get started!</li>
+      </ul>
+      <button id="clear-history-btn" class="link-btn">Clear history</button>
+    </div>
+
+    <div class="sidebar-section" id="folder-section" style="display:none;">
+      <h2>📁 Current Folder</h2>
+      <p class="hint-text" id="folder-name-label">—</p>
+      <ul id="folder-file-list" class="recent-list"></ul>
+    </div>
+  </aside>
+
+  <!-- ------------ CONTENT ------------ -->
+  <main class="content">
+
+    <div class="view-toggle-bar">
+      <div class="current-file">
+        <span id="current-file-icon">📄</span>
+        <span id="current-file-name">No file open yet</span>
+      </div>
+
+      <div class="view-toggle" role="group" aria-label="Switch how the file is shown">
+        <button id="toggle-rendered" class="toggle-btn active">
+          🖼️ Pretty View
+          <small>See it formatted, like a document</small>
+        </button>
+        <button id="toggle-plain" class="toggle-btn">
+          🔤 Plain Text
+          <small>See the raw words and symbols</small>
+        </button>
+      </div>
+    </div>
+
+    <div class="viewer-frame">
+      <div id="empty-state" class="empty-viewer">
+        <div class="empty-emoji">🙋</div>
+        <h2>Nothing to show yet</h2>
+        <p>Open a Markdown file or a folder from the left to get started.</p>
+        <p class="empty-sub">Not sure what any of this means? Hit the <strong>❓ HELP!</strong> button up top.</p>
+      </div>
+
+      <article id="rendered-view" class="rendered-view hidden"></article>
+      <pre id="plain-view" class="plain-view hidden"></pre>
+    </div>
+  </main>
+</div>
+
+<!-- ============ ONBOARDING GUIDE OVERLAY ============ -->
+<div id="onboarding-overlay" class="overlay hidden">
+  <div class="onboarding-card">
+    <div class="onboarding-step-emoji" id="ob-emoji">👋</div>
+    <h2 id="ob-title">Welcome to Dumdum Viewer!</h2>
+    <p id="ob-body">This tiny guide will show you everything in about 30 seconds. No jargon, promise.</p>
+
+    <div class="onboarding-dots" id="ob-dots"></div>
+
+    <div class="onboarding-actions">
+      <label class="dont-show-label">
+        <input type="checkbox" id="ob-dont-show" />
+        Don't show this again
+      </label>
+      <div class="onboarding-buttons">
+        <button id="ob-skip" class="link-btn">Skip</button>
+        <button id="ob-next" class="big-btn primary small">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  <p>Made for people who just want to read their darn Markdown files. No sign-up, no cloud, your files never leave your computer.</p>
+</footer>
+
+</body>
+</html>
