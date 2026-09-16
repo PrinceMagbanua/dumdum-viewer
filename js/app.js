@@ -13,7 +13,8 @@
 
   const els = {
     sidebar: document.getElementById("sidebar"),
-    sidebarToggleBtn: document.getElementById("sidebar-toggle-btn"),
+    sidebarHandle: document.getElementById("sidebar-handle"),
+    sidebarHandleArrow: document.getElementById("sidebar-handle-arrow"),
     themeBtn: document.getElementById("theme-picker-btn"),
     themePopover: document.getElementById("theme-popover"),
     helpBtn: document.getElementById("help-btn"),
@@ -46,6 +47,9 @@
     tourNext: document.getElementById("tour-next"),
     tourSkip: document.getElementById("tour-skip"),
     tourDontShow: document.getElementById("tour-dont-show"),
+    editToolbar: document.getElementById("edit-toolbar"),
+    modeFab: document.getElementById("mode-fab"),
+    modeFabIcon: document.getElementById("mode-fab-icon"),
   };
 
   let currentText = "";
@@ -89,10 +93,13 @@
   /* --------------------------- SIDEBAR --------------------------- */
   function setSidebarCollapsed(collapsed) {
     els.sidebar.classList.toggle("collapsed", collapsed);
+    els.sidebarHandle.classList.toggle("expanded", !collapsed);
+    els.sidebarHandleArrow.textContent = collapsed ? "›" : "‹";
+    els.sidebarHandle.title = collapsed ? "Show your files" : "Hide your files";
     localStorage.setItem("dumdum-sidebar-collapsed", collapsed ? "true" : "false");
   }
 
-  els.sidebarToggleBtn.addEventListener("click", () => {
+  els.sidebarHandle.addEventListener("click", () => {
     setSidebarCollapsed(!els.sidebar.classList.contains("collapsed"));
   });
 
@@ -128,10 +135,44 @@
       els.editView.value = currentText;
     }
     els.renderedView.setAttribute("contenteditable", hasFile ? "true" : "false");
+    els.editToolbar.classList.toggle("hidden", !(hasFile && mode === "rendered"));
   }
 
-  els.toggleRendered.addEventListener("click", () => setMode("rendered"));
-  els.togglePlain.addEventListener("click", () => setMode("plain"));
+  els.toggleRendered.addEventListener("click", () => {
+    setMode("rendered");
+    els.modeFab.classList.remove("expanded");
+  });
+  els.togglePlain.addEventListener("click", () => {
+    setMode("plain");
+    els.modeFab.classList.remove("expanded");
+  });
+
+  /* --------------------------- FLOATING MODE SWITCH --------------------------- */
+  els.modeFabIcon.addEventListener("click", () => {
+    els.modeFab.classList.toggle("expanded");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!els.modeFab.contains(e.target)) {
+      els.modeFab.classList.remove("expanded");
+    }
+  });
+
+  /* --------------------------- PRETTY VIEW TOOLBAR --------------------------- */
+  els.editToolbar.querySelectorAll("button").forEach((btn) => {
+    // Prevent the button from stealing focus/selection away from the editable area.
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => {
+      els.renderedView.focus();
+      const cmd = btn.dataset.cmd;
+      let value = btn.dataset.value || null;
+      if (cmd === "createLink") {
+        value = prompt("Where should this link go? (paste a web address)");
+        if (!value) return;
+      }
+      document.execCommand(cmd, false, value);
+    });
+  });
 
   // Editing directly in the textarea keeps currentText live without waiting for a mode switch.
   els.editView.addEventListener("input", () => {
@@ -459,11 +500,11 @@
   /* --------------------------- GUIDED TOOLTIP TOUR --------------------------- */
   const TOUR_STEPS = [
     {
-      target: "#sidebar-toggle-btn",
+      target: "#sidebar-handle",
       placement: "right",
       emoji: "👋",
       title: "Welcome to Dumdum Viewer!",
-      body: "This tiny guided tour points out each feature right where it lives. Click this ☰ button any time to show or hide your file list.",
+      body: "This tiny guided tour points out each feature right where it lives. Click this tab any time to show or hide your file list.",
     },
     {
       target: "#open-file-btn",
@@ -480,11 +521,11 @@
       body: "Every file you open is remembered here, even after closing your browser. Click any of them to jump straight back in.",
     },
     {
-      target: "#view-toggle",
-      placement: "bottom",
-      emoji: "🖼️",
+      target: "#mode-fab-icon",
+      placement: "left",
+      emoji: "✏️",
       title: "Pretty View vs. Edit View",
-      body: "Pretty View shows your file nicely formatted — and you can click and type right into it. Edit View shows the raw Markdown code, for when you need it.",
+      body: "This bubble in the corner switches how your file is shown. Hover or click it to reveal 'Pretty View' (nicely formatted, and directly editable) and 'Edit View' (the raw Markdown code, for developers).",
     },
     {
       target: "#theme-picker-btn",
@@ -522,6 +563,10 @@
         top = rect.top + rect.height / 2 - tipRect.height / 2;
         left = rect.right + gap;
         break;
+      case "left":
+        top = rect.top + rect.height / 2 - tipRect.height / 2;
+        left = rect.left - tipRect.width - gap;
+        break;
       case "bottom":
         top = rect.bottom + gap;
         left = rect.left + rect.width / 2 - tipRect.width / 2;
@@ -538,9 +583,10 @@
     tip.style.left = left + "px";
     tip.style.visibility = "visible";
 
-    els.tourArrow.className = "tour-arrow " + (step.placement === "right" ? "left" : "top");
-    if (step.placement === "right") {
-      els.tourArrow.style.top = rect.top + rect.height / 2 - top - 7 + "px";
+    const arrowClass = { right: "left", left: "right", bottom: "top" }[step.placement] || "top";
+    els.tourArrow.className = "tour-arrow " + arrowClass;
+    if (arrowClass === "left" || arrowClass === "right") {
+      els.tourArrow.style.top = Math.max(14, rect.top + rect.height / 2 - top - 7) + "px";
       els.tourArrow.style.left = "";
     } else {
       els.tourArrow.style.left = Math.max(14, rect.left + rect.width / 2 - left - 7) + "px";
@@ -551,6 +597,8 @@
   function renderTourStep() {
     const step = TOUR_STEPS[tourStep];
     if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
+
+    els.modeFab.classList.toggle("expanded", step.target === "#mode-fab-icon");
 
     const target = document.querySelector(step.target);
     if (!target) {
@@ -603,6 +651,7 @@
   function closeTour() {
     tourActive = false;
     els.tourTooltip.classList.add("hidden");
+    els.modeFab.classList.remove("expanded");
     if (currentHighlighted) currentHighlighted.classList.remove("tour-highlight");
     currentHighlighted = null;
     window.removeEventListener("resize", repositionIfActive);

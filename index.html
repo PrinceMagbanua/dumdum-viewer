@@ -18,7 +18,6 @@
 <!-- ============ TOP BAR ============ -->
 <header class="topbar">
   <div class="brand">
-    <button id="sidebar-toggle-btn" class="icon-btn" title="Show/hide your files">☰</button>
     <span class="brand-emoji">📖</span>
     <div class="brand-text">
       <h1>Dumdum Viewer</h1>
@@ -93,25 +92,24 @@
   <!-- ------------ CONTENT ------------ -->
   <main class="content">
 
-    <div class="view-toggle-bar">
-      <div class="current-file">
-        <span id="current-file-icon">📄</span>
-        <span id="current-file-name">No file open yet</span>
-      </div>
-
-      <div class="view-toggle" id="view-toggle" role="group" aria-label="Switch between Pretty View and raw Edit View">
-        <button id="toggle-rendered" class="toggle-btn active">
-          🖼️ Pretty View
-        </button>
-        <button id="toggle-plain" class="toggle-btn">
-          ✏️ Edit View <small>(for developers)</small>
-        </button>
-      </div>
+    <div class="current-file">
+      <span id="current-file-icon">📄</span>
+      <span id="current-file-name">No file open yet</span>
     </div>
 
-    <p class="toggle-hint">💡 <strong>Pretty View is already editable</strong> — just click anywhere in the text below and start typing. You only need Edit View if you want to see the raw Markdown code.</p>
-
     <div class="viewer-frame" id="drop-zone">
+      <div id="edit-toolbar" class="edit-toolbar hidden">
+        <button data-cmd="bold" title="Bold"><b>B</b></button>
+        <button data-cmd="italic" title="Italic"><i>I</i></button>
+        <button data-cmd="formatBlock" data-value="H2" title="Heading">H</button>
+        <button data-cmd="insertUnorderedList" title="Bullet list">• —</button>
+        <button data-cmd="insertOrderedList" title="Numbered list">1. —</button>
+        <button data-cmd="formatBlock" data-value="BLOCKQUOTE" title="Quote">❝</button>
+        <button data-cmd="formatBlock" data-value="PRE" title="Code block">{ }</button>
+        <button data-cmd="createLink" title="Add a link">🔗</button>
+        <button data-cmd="removeFormat" title="Clear formatting">⌫</button>
+      </div>
+
       <div id="drag-overlay" class="drag-overlay hidden">
         <div class="drag-overlay-emoji" id="drag-overlay-emoji">📄</div>
         <p id="drag-overlay-text">Drop it here!</p>
@@ -127,6 +125,19 @@
       <textarea id="edit-view" class="edit-view hidden" spellcheck="false"></textarea>
     </div>
   </main>
+</div>
+
+<button id="sidebar-handle" class="sidebar-handle" title="Show/hide your files">
+  <span id="sidebar-handle-arrow">›</span>
+</button>
+
+<!-- ============ FLOATING VIEW/EDIT MODE SWITCH ============ -->
+<div id="mode-fab" class="mode-fab">
+  <div class="mode-fab-options" id="view-toggle">
+    <button id="toggle-rendered" class="fab-option active">🖼️ Pretty View</button>
+    <button id="toggle-plain" class="fab-option">✏️ Edit View <small>(dev)</small></button>
+  </div>
+  <button id="mode-fab-icon" class="mode-fab-icon" title="Switch between Pretty View and Edit View">✏️</button>
 </div>
 
 <!-- ============ GUIDED TOOLTIP TOUR ============ -->
